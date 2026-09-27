@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Barrio o zona de búsqueda. Agrupa canchas.
+model Zona {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  ciudad    String
+  canchas   Cancha[]
+  jugadores Usuario[]
+}
+
+/// Predio. El administrador la prende o apaga sin borrar partidos.
+model Cancha {
+  id         Int       @id @default(autoincrement())
+  nombre     String
+  superficie String
+  direccion  String
+  precioHora Int
+  activa     Boolean   @default(true)
+  zonaId     Int
+  zona       Zona      @relation(fields: [zonaId], references: [id])
+  partidos   Partido[]
+}
+
+/// Jugador o administrador (rol). Un solo usuario, dos roles.
+model Usuario {
+  id             Int            @id @default(autoincrement())
+  nombre         String
+  email          String         @unique
+  passwordHash   String
+  rol            String         @default("jugador")
+  posicion       String?
+  avisoFaltaUno  Boolean        @default(true)
+  avisoCompleto  Boolean        @default(true)
+  mostrarZona    Boolean        @default(true)
+  suspendido     Boolean        @default(false)
+  zonaHabitualId Int?
+  zonaHabitual   Zona?          @relation(fields: [zonaHabitualId], references: [id])
+  organizados    Partido[]      @relation("Organizador")
+  inscripciones  Inscripcion[]
+  emitidas       Calificacion[] @relation("Emisor")
+  recibidas      Calificacion[] @relation("Evaluado")
+}
+
+model Partido {
+  id             Int            @id @default(autoincrement())
+  titulo         String
+  fechaHora      DateTime
+  formato        String
+  cupo           Int
+  nivel          String
+  costoJugador   Int
+  estado         String         @default("abierto")
+  denuncia       String?
+  organizadorId  Int
+  organizador    Usuario        @relation("Organizador", fields: [organizadorId], references: [id])
+  canchaId       Int
+  cancha         Cancha         @relation(fields: [canchaId], references: [id])
+  equipos        Equipo[]
+  inscripciones  Inscripcion[]
+  calificaciones Calificacion[]
+  createdAt      DateTime       @default(now())
+
+  @@index([fechaHora])
+}
+
+/// Siempre dos por partido: lado A y lado B.
+model Equipo {
+  id            Int           @id @default(autoincrement())
+  lado          String
+  partidoId     Int
+  partido       Partido       @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+  inscripciones Inscripcion[]
+
+  @@unique([partidoId, lado])
+}
+
+model Inscripcion {
+  id        Int      @id @default(autoincrement())
+  jugadorId Int
+  jugador   Usuario  @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  partidoId Int
+  partido   Partido  @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+  equipoId  Int
+  equipo    Equipo   @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([jugadorId, partidoId])
+}
+
+/// Puntualidad y fair play, después del partido.
+model Calificacion {
+  id          Int     @id @default(autoincrement())
+  puntualidad Int
+  fairPlay    Int
+  emisorId    Int
+  emisor      Usuario @relation("Emisor", fields: [emisorId], references: [id], onDelete: Cascade)
+  evaluadoId  Int
+  evaluado    Usuario @relation("Evaluado", fields: [evaluadoId], references: [id], onDelete: Cascade)
+  partidoId   Int
+  partido     Partido @relation(fields: [partidoId], references: [id], onDelete: Cascade)
+
+  @@unique([emisorId, evaluadoId, partidoId])
+}
